@@ -1,4 +1,4 @@
-# Copyright 2016-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2016-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Licensed under the Amazon Software License (the "License"). You may not use
 # this file except in compliance with the License. A copy of the License is
 # located at
@@ -14,7 +14,7 @@ import argparse
 import json
 import traceback
 import sys
-from job import Job
+from awsglue.job import Job
 
 _global_args = {}
 
@@ -49,6 +49,22 @@ def callsite():
     return "".join(traceback.format_list(traceback.extract_stack()[:-2]))
 
 
+# Definitions for Python 2/Python 3
+if sys.version >= "3":
+    def iteritems(d, **kwargs):
+        return iter(d.items(**kwargs))
+    def iterkeys(d, **kwargs):
+        return iter(d.values(**kwargs))
+    def itervalues(d, **kwargs):
+        return iter(d.values(**kwargs))
+else:
+    def iteritems(d, **kwargs):
+        return d.iteritems(**kwargs)
+    def iterkeys(d, **kwargs):
+        return d.iterkeys(**kwargs)
+    def itervalues(d, **kwargs):
+        return d.itervalues(**kwargs)
+
 class GlueArgumentError(Exception):
     pass
 
@@ -72,6 +88,11 @@ def getResolvedOptions(args, options):
     parser.add_argument(Job.job_bookmark_options()[0], choices =Job.job_bookmark_options()[1:], required = False)
     parser.add_argument(Job.continuation_options()[0], choices =Job.continuation_options()[1:], required = False)
 
+    for option in Job.job_bookmark_range_options():
+        if option[2:] in options:
+            raise RuntimeError("Using reserved arguments " + option)
+        parser.add_argument(option, required=False)
+
     for option in Job.id_params()[1:]:
         if option in options:
             raise RuntimeError("Using reserved arguments " + option)
@@ -81,6 +102,10 @@ def getResolvedOptions(args, options):
     if Job.encryption_type_options()[0] in options:
         raise RuntimeError("Using reserved arguments " + Job.encryption_type_options()[0])
     parser.add_argument(Job.encryption_type_options()[0], choices = Job.encryption_type_options()[1:])
+
+    if Job.data_lineage_options()[0] in options:
+        raise RuntimeError("Using reserved arguments " + Job.data_lineage_options()[0])
+    parser.add_argument(Job.data_lineage_options()[0], required=False)
         
     # TODO: Remove special handling for 'RedshiftTempDir' and 'TempDir' after TempDir is made mandatory for all Jobs
     # Remove 'RedshiftTempDir' and 'TempDir' from list of user supplied options
@@ -117,6 +142,17 @@ def getResolvedOptions(args, options):
             bookmark_value = Job.job_bookmark_options()[option_index]
 
         parsed_dict['job_bookmark_option'] = bookmark_value
+    absent_range_option = []
+    for option in Job.job_bookmark_range_options():
+       key = option[2:].replace('-','_')
+       if key not in parsed_dict or parsed_dict[key] is None:
+           absent_range_option.append(option)
+    if parsed_dict['job_bookmark_option']  == 'job-bookmark-pause':
+        if len(absent_range_option) == 1:
+            raise RuntimeError("Missing option or value for "  +  absent_range_option[0])
+    else:
+        if len(absent_range_option) == 0:
+            raise RuntimeError("Invalid option(s)"  +  ' '.join(Job.job_bookmark_range_options()))
 
     _global_args.update(parsed_dict)
 

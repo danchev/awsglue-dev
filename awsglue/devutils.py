@@ -1,4 +1,4 @@
-# Copyright 2016-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2016-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Licensed under the Amazon Software License (the "License"). You may not use
 # this file except in compliance with the License. A copy of the License is
 # located at
@@ -10,6 +10,7 @@
 # or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+from __future__ import print_function
 import boto3
 import os
 import logging
@@ -219,7 +220,7 @@ class GlueJobUtils:
             self._upload_file_to_s3(job.command.scriptLocation, file)
             return self.glue.create_job(**job.as_job_create_dict())
         except Exception as inst:
-            print inst
+            print(inst)
             logging.error('Failed to create job')
 
     def update_job(self, job, file=''):
@@ -227,7 +228,7 @@ class GlueJobUtils:
             self._upload_file_to_s3(job.command.scriptLocation, file)
             return self.glue.update_job(jobName=job.name, jobUpdate=job.as_job_update_dict())
         except Exception as inst:
-            print inst
+            print(inst)
             logging.error('Failed to update job')
 
     def delete_job(self, jobName):

@@ -1,4 +1,4 @@
-# Copyright 2016-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2016-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Licensed under the Amazon Software License (the "License"). You may not use
 # this file except in compliance with the License. A copy of the License is
 # located at
@@ -18,6 +18,9 @@ class Job:
     @classmethod
     def job_bookmark_options(cls):
         return [ '--job-bookmark-option', 'job-bookmark-enable', 'job-bookmark-pause', 'job-bookmark-disable' ]
+    @classmethod
+    def job_bookmark_range_options(cls):
+        return [ '--job-bookmark-from', '--job-bookmark-to' ]
 
     @classmethod
     def id_params(cls):
@@ -26,6 +29,10 @@ class Job:
     @classmethod
     def encryption_type_options(cls):
         return [ '--encryption-type' , 'sse-s3' ]
+
+    @classmethod
+    def data_lineage_options(cls):
+        return [ '--enable-data-lineage']
     
     def __init__(self, glue_context):
         self._job = glue_context._jvm.Job

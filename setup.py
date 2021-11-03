@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='fake-awsglue',
-    version='0.0.0.post20190320',
+    version='0.0.0.post20211019',
     long_description=__doc__,
     packages=find_packages(),
     include_package_data=True,

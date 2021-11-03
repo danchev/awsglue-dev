@@ -1,4 +1,4 @@
-# Copyright 2016-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2016-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Licensed under the Amazon Software License (the "License"). You may not use
 # this file except in compliance with the License. A copy of the License is
 # located at
@@ -13,8 +13,8 @@
 from awsglue.transforms import GlueTransform
 
 class ResolveChoice(GlueTransform):
-    def __call__(self, frame, specs=None, choice="", database=None, table_name=None, transformation_ctx="", info="", stageThreshold=0, totalThreshold=0):
-        return frame.resolveChoice(specs, choice, database, table_name)
+    def __call__(self, frame, specs=None, choice="", database=None, table_name=None, transformation_ctx="", info="", stageThreshold=0, totalThreshold=0, catalog_id=None):
+        return frame.resolveChoice(specs, choice, database, table_name, transformation_ctx, info, stageThreshold, totalThreshold, catalog_id)
 
     @classmethod
     def describeArgs(cls):
@@ -63,8 +63,13 @@ class ResolveChoice(GlueTransform):
                 "description": "Max number of errors total until processing will error out.",
                 "optional": True,
                 "defaultValue": "0"}
+        arg10 = {"name": "catalog_id",
+                "type": "String",
+                "description": "Catalog id for match_catalog id.",
+                "optional": True,
+                "defaultValue": "accountId"}
 
-        return [arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9]
+        return [arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10]
 
     @classmethod
     def describeTransform(cls):

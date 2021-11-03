@@ -1,4 +1,4 @@
-# Copyright 2016-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2016-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Licensed under the Amazon Software License (the "License"). You may not use
 # this file except in compliance with the License. A copy of the License is
 # located at
@@ -10,15 +10,23 @@
 # or implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+from __future__ import print_function
 import json
+import sys
 from awsglue.utils import makeOptions, callsite
-from itertools import imap, ifilter
 from awsglue.gluetypes import _deserialize_json_string, _create_dynamic_record, _revert_to_dict, _serialize_schema
-from awsglue.utils import _call_site, _as_java_list, _as_scala_option, _as_resolve_choiceOption
+from awsglue.utils import _call_site, _as_java_list, _as_scala_option, _as_resolve_choiceOption, iteritems, itervalues
 from pyspark.rdd import RDD, PipelinedRDD
 from pyspark.sql.dataframe import DataFrame
 from pyspark.serializers import PickleSerializer, BatchedSerializer
 
+if sys.version >= "3":
+    long = int
+    basestring = unicode = str
+    imap=map
+    ifilter=filter
+else:
+    from itertools import imap, ifilter
 
 class ResolveOption(object):
     """
@@ -78,7 +86,7 @@ class DynamicFrame(object):
                     if isinstance(E, KeyError) or isinstance(E, ValueError) or isinstance(E, TypeError):
                         return False
                     x['isError'] = True
-                    x['errorMessage'] = E.message
+                    x['errorMessage'] = str(E)
                     return True
 
         def func(iterator):
@@ -103,7 +111,7 @@ class DynamicFrame(object):
                 return x
             except Exception as E:
                 x['isError'] = True
-                x['errorMessage'] = E.message
+                x['errorMessage'] = str(E)
                 return x
         def func(_, iterator):
             return imap(wrap_dict_with_dynamic_records, iterator)
@@ -116,7 +124,7 @@ class DynamicFrame(object):
                                             long(totalThreshold)), self.glue_ctx, self.name)
 
     def printSchema(self):
-        print self._jdf.schema().treeString()
+        print(self._jdf.schema().treeString())
 
     def toDF(self, options = None):
         """
@@ -380,7 +388,7 @@ class DynamicFrame(object):
         return DynamicFrame(new_jdf, self.glue_ctx, self.name)
 
     def resolveChoice(self, specs=None, choice="", database=None, table_name=None,
-                      transformation_ctx="", info="", stageThreshold=0, totalThreshold=0):
+                      transformation_ctx="", info="", stageThreshold=0, totalThreshold=0, catalog_id=None):
         """
         :param specs: specification for choice type and corresponding resolve action,
                       if the specs is empty, then tape backend would go one round of the data
@@ -416,8 +424,66 @@ class DynamicFrame(object):
             self.glue_ctx._jvm.PythonUtils.toSeq(specs_list),
             choice_option, database_option, table_name_option,
             transformation_ctx,
-            _call_site(self._sc, callsite(), info), long(stageThreshold), long(totalThreshold))
+            _call_site(self._sc, callsite(), info), long(stageThreshold), long(totalThreshold),
+            _as_scala_option(self._sc, catalog_id))
 
+        return DynamicFrame(new_jdf, self.glue_ctx, self.name)
+
+    def mergeDynamicFrame(self, stage_dynamic_frame, primary_keys, transformation_ctx = "", options = {}, info = "", stageThreshold = 0, totalThreshold = 0):
+        """
+        Merge this DynamicFrame with a staging DynamicFrame based on the provided primary keys to identify records.
+        Duplicate records (records with same primary keys) are not de-duplicated. All records (including duplicates) are
+        retained from the source, if there is no matching record in staging frame. If staging frame has matching records
+        then the records from the staging frame overwrites the records in the source.
+        :param stage_dynamic_frame: Staging DynamicFrame
+        :param primary_keys: List of primary key fields to match records from source and staging dynamic frame
+        :param transformation_ctx: context key to retrieve metadata about the current transformation
+        :param options: optional options for the transformation
+        :param info: String, any string to be associated with errors in this transformation.
+        :param stageThreshold: Long, number of errors in the given transformation for which the processing needs to error out.
+        :param totalThreshold: Long, total number of errors upto and including in this transformation
+          for which the processing needs to error out.
+        :return: DynamicFrame
+        """
+        if isinstance(primary_keys, basestring):
+            primary_keys = [primary_keys]
+        return DynamicFrame(self._jdf.mergeDynamicFrames(stage_dynamic_frame._jdf,
+                                                         self.glue_ctx._jvm.PythonUtils.toSeq(primary_keys),
+                                                         transformation_ctx,
+                                                         makeOptions(self._sc, options),
+                                                         _call_site(self._sc, callsite(), info),
+                                                         long(stageThreshold),
+                                                         long(totalThreshold)),
+                            self.glue_ctx, self.name)
+
+    def union(self, other_frame, transformation_ctx = "", info = "", stageThreshold = 0, totalThreshold = 0):
+        """Returns a DynamicFrame containing all records in this frame and all records in other_frame.
+        :param other_frame: DynamicFrame to union with this one.
+        :param transformation_ctx: context key to retrieve metadata about the current transformation
+        :param info: String, any string to be associated with errors in this transformation.
+        :param stageThreshold: Long, number of errors in the given transformation for which the processing needs to error out.
+        :param totalThreshold: Long, total number of errors upto and including in this transformation
+          for which the processing needs to error out.
+        :return: DynamicFrame
+        """
+        union = self._jdf.union(other_frame._jdf, transformation_ctx, _call_site(self._sc, callsite(), info),
+                                long(stageThreshold), long(totalThreshold))
+        return DynamicFrame(union, self.glue_ctx, union.name)
+
+    def getNumPartitions(self):
+        """Returns the number of partitions in the current DynamicFrame."""
+        return self._jdf.getNumPartitions()
+
+    def repartition(self, num_partitions, transformation_ctx = "", info = "", stageThreshold = 0, totalThreshold = 0):
+        new_jdf = self._jdf.repartition(num_partitions, transformation_ctx,
+                                        _call_site(self._sc, callsite(), info),
+                                        long(stageThreshold), long(totalThreshold))
+        return DynamicFrame(new_jdf, self.glue_ctx, self.name)
+
+    def coalesce(self, num_partitions, shuffle = False, transformation_ctx = "", info = "", stageThreshold = 0, totalThreshold = 0):
+        new_jdf = self._jdf.coalesce(num_partitions, shuffle, transformation_ctx,
+                                        _call_site(self._sc, callsite(), info),
+                                        long(stageThreshold), long(totalThreshold))
         return DynamicFrame(new_jdf, self.glue_ctx, self.name)
 
     def errorsAsDynamicFrame(self):
@@ -491,7 +557,7 @@ class DynamicFrameCollection(object):
         :return: a DynamicFrameCollection
         """
         new_dict = {}
-        for k,v in self._df_dict.iteritems():
+        for k,v in iteritems(self._df_dict):
             res = callable(v, transformation_ctx+':'+k)
             if not isinstance(res, DynamicFrame):
                 raise TypeError("callable must return a DynamicFrame. "\
@@ -508,7 +574,7 @@ class DynamicFrameCollection(object):
         """
         new_dict = {}
 
-        for frame in self._df_dict.itervalues():
+        for frame in itervalues(self._df_dict):
             res = f(frame, transformation_ctx+':'+frame.name)
 
             if isinstance(res, DynamicFrame):
